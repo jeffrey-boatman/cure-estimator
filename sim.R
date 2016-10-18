@@ -1,7 +1,7 @@
-# Simulation parameters
-n.mc <- 1000
-n.boot <- 1000
-n.cores <- 4
+# Simulation parameters --------------------------------------
+n.mc <- 1000             # number of Monte Carlo Iterations
+n.boot <- 1000           # number of bootstrap iterations
+n.cores <- 4             # number of cores to use for parallel processing
 output.file <- "out.txt" # where to write results
 
 library(parallel)
