@@ -262,13 +262,6 @@ cols <- c(
   paste0(c("cure", "cutoff.ipw", "pp", "src.ipw"), ".se")
 )
 
-write.table(t(cols), 
-  file = paste0(output.file), 
-  row.names = FALSE,   
-  col.names = FALSE,
-  append = FALSE, 
-  quote = FALSE)
-
 # run simulation in parallel
 out.list <- mclapply(1:n.mc, 
   failwith(NULL, sim),
@@ -276,10 +269,11 @@ out.list <- mclapply(1:n.mc,
   n.boot = n.boot)
 
 out <- do.call(rbind, out.list)
+colnames(out) <- cols
 
 write.table(out,
   file = output.file,
   quote = FALSE,
   row.names = FALSE,
-  col.names = FALSE,
+  col.names = TRUE,
   append = TRUE)
