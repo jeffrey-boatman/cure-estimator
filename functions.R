@@ -131,3 +131,14 @@ weighted.sd <- function(x, mean.1, mean.2, weight.1, weight.2) {
   sum.w <- sum(weight.1) + sum(weight.2)
   sqrt(sum(weight.1 * (x - mean.1) ^ 2 + weight.2 * (x - mean.2) ^ 2) / sum.w)
 }
+
+arrange <- function(m, x) {
+  # arranges the elements of a matrix m based on the 
+  # ordering given in x. This is a convenience function
+  # used when deriving covariance matrices of conditional
+  # normal distributions. 
+  n <- length(x)
+  index <- cbind(rep(x, n), rep(x, each = n))
+  matrix(m[index], n, n)
+}
+
