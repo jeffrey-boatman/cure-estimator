@@ -127,7 +127,7 @@ sim <- function(mc.it, n.boot = 1000){
           coef(ncmod)[2],
           rep(rr, 2))
 
-        # estimating the mixturedistribution.
+        # estimating the mixture distribution.
         fit <- mixfit(bio = bio[inmix], 
           y = y[inmix], 
           known = k[inmix],
