@@ -2,6 +2,7 @@
 
 Simulation code for the manuscript 
 "Estimating Causal Effects from a Randomized Clinical Trial when Noncompliance is Measured with Error".
+Designed for R 3.2.0
 
 Each R file is documented internally.
 
