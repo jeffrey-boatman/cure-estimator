@@ -13,3 +13,5 @@ true_mu.R - finds the value of E{Y*(1, 0)} = mu(1, 0) for given simulation param
 
 functions.R - functions used in sim.R and true_mu.R
 
+example_analysis.R - creates a simulated data set and does an anlysis as in the application
+section of the manuscript. 
