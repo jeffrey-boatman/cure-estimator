@@ -190,13 +190,8 @@ for(b in seq_len(n.boot)){
     (cutoff.ipw_t <- y.a2.mean_t - weighted.mean(y_t, comp.hat_t / 
       cutoff.den.weight_t))
 
-
-    # mean of self-reported compliers
-    # (naive1 <- mean(y[!k & comp | !hh]))
     (pp_t <- y.a2.mean_t - mean(y_t[src_t]))
 
-
-    # IPW w/ self-reported compliers. 
     src.den.model_t <- glm(src_t[!k_t] ~ x_t[!k_t], 
       family = binomial(link = "probit"))
     src.den.weight_t <- c(pnorm(cbind(1, x_t) %*% coef(src.den.model_t)))

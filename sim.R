@@ -1,8 +1,9 @@
-# Simulation parameters --------------------------------------
+# Simulation parameters ---------------------------------------------------
 n.mc <- 1000             # number of Monte Carlo Iterations
 n.boot <- 1000           # number of bootstrap iterations
 n.cores <- 4             # number of cores to use for parallel processing
 output.file <- "out.txt" # where to write results
+# -------------------------------------------------------------------------
 
 library(parallel)
 
@@ -191,14 +192,13 @@ sim <- function(mc.it, n.boot = 1000){
 
             prob.compliant_t <- rep(0, n + n_k)
             prob.compliant_t[inmix_t] <- fit_t$post.prob
-            cure.den.model_t <- suppressWarnings(glm(prob.compliant_t[!k_t] ~ x[!k_t], 
+            cure.den.model_t <- suppressWarnings(glm(prob.compliant_t[!k_t] ~ x_t[!k_t], 
               family = binomial(link = "probit")))	
             cure.den.weight_t <- c(pnorm(cbind(1, x_t) %*% coef(cure.den.model_t)))
             (cure_t <- weighted.mean(y_t, prob.compliant_t * 
               src_t / cure.den.weight_t))
             out[1] <- cure_t
 
-            # 5th estimator. Same as 5, with cutoff for compliance. 
             comp.hat_t <- (prob.compliant_t * src_t) > 0.5
             cutoff.den.model_t <- suppressWarnings(glm(comp.hat_t[!k_t] ~ x_t[!k_t], 
               family = binomial(link = "probit")))
@@ -207,12 +207,9 @@ sim <- function(mc.it, n.boot = 1000){
             (cutoff.ipw_t <- weighted.mean(y_t, comp.hat_t / cutoff.den.weight_t))
             out[2] <- cutoff.ipw_t
 
-            # mean of self-reported compliers
-            # (naive1 <- mean(y[!k & comp | !hh]))
             (pp_t <- mean(y_t[src_t]))
             out[3] <- pp_t
 
-            # IPW w/ self-reported compliers. 
             src.den.model_t <- glm(src_t[!k_t] ~ x_t[!k_t], 
               family = binomial(link = "probit"))
             src.den.weight_t <- c(pnorm(cbind(1, x_t) %*% coef(src.den.model_t)))
