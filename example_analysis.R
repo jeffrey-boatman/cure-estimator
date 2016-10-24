@@ -174,7 +174,7 @@ for(b in seq_len(n.boot)){
 
     prob.compliant_t <- rep(0, nn)
     prob.compliant_t[inmix_t] <- fit_t$post.prob
-    cure.den.model_t <- suppressWarnings(glm(prob.compliant_t[!k_t] ~ x[!k_t], 
+    cure.den.model_t <- suppressWarnings(glm(prob.compliant_t[!k_t] ~ x_t[!k_t], 
       family = binomial(link = "probit")))	
     cure.den.weight_t <- c(pnorm(cbind(1, x_t) %*% coef(cure.den.model_t)))
     (cure_t <- y.a2.mean_t - weighted.mean(y_t, prob.compliant_t * 
