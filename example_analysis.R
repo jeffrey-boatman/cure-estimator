@@ -9,153 +9,100 @@
 
 source("functions.R")
 
-n <- 1000 # number of observations in each treatment group.
+example.data <- read.table("example_data.txt", header = TRUE, as.is = TRUE)
 
-set.seed(333)
+# x is the confounder
+# bio is the biomarker
+# y is the outcome, src is the indicator for self-reported compliance
+# src is the indicator for self-reported compliance. Note that 
+#  participants with known = 1 have src = 0
+# known is the indicator for whether ppnt's compliance status is known
+# treatment is the treatment group. For simplicity, all particpants in
+#  group B are assumed to be compliant.
+str(example.data)
 
-# generate data for treatment group 2. --------------------------------
-# For this group, mu(2, 0) = 20. All participants are assumed to be 
-# compliant for simplicity.
-y.a2 <- rnorm(n, 20, 3)
-(y.a2.mean <- mean(y.a2))
+group.a <- subset(example.data, treatment == "A")
+group.b <- subset(example.data, treatment == "B")
 
-# generate data from treatment group 2. -------------------------------
-# For this group, mu(1, 0) = 16.5927. Some participants are 
-# noncompliant.
+(y.a2.mean <- mean(group.b$y))
 
-# mu(2, 0) - mu(1, 0) = 3.4073 is the target of inference. 
+# get estimated mean for group A.
+x <- group.a$x
+bio <- group.a$bio
+y <- group.a$y
+src <- group.a$src
+known <- k <- group.a$known
 
-# Pr(C = 1) = 0.18
-p <- 0.18 
-
-# correlation matrix for data generation. 
-rho1 <- -0.405 
-rho2 <- -0.33 
-rho3 <- -0.08 
-rho4 <- 0.8148148  
-rho5 <- 0.7 
-rho6 <- 0.9414324
-m <- matrix(c(1,    rho1, rho2, rho3,
-              rho1, 1,    rho4, rho5,
-              rho2, rho4, 1,    rho6,
-              rho3, rho5, rho6, 1), 4, 4)
-
-n.k <- 100 # number of participants known to be compliant.
-nn <- n + n.k
-
-# indicator for whether subject reports noncompliance without error. 
-hh <- runif(nn) < 0.7
-
-# generate data for main sample
-meanvec <- c(0, 10, 1.5, 16)
-s <- sqrt(c(1, 2, 2, 3))
-sigma <- diag(s) %*% m %*% diag(s)
-ts <- t(chol(sigma)) 
-dd <- t(replicate(n, meanvec + ts %*% rnorm(4), simplify = TRUE))
-cstar <- dd[, 1]
-x <- dd[, 2]
-bio <- dd[, 3]
-y <- dd[, 4]
-comp <- cstar > qnorm(1 - p)
-
-# generate data for known compliers
-ff <- t(replicate(1e4, meanvec + ts %*% rnorm(4), simplify = TRUE))
-comp_k <- ff[, 1] > qnorm(1 - 0.18)
-x_k <- ff[comp_k, 2][seq_len(n.k)]
-bio_k <- ff[comp_k, 3][seq_len(n.k)]
-y_k <- ff[comp_k, 4][seq_len(n.k)]
-
-# indicator for whether compliance status is known
-k <- rep(c(TRUE, FALSE), c(n.k, n))
-
-# combine data for entire sample.
-k <- rep(c(TRUE, FALSE), c(n.k, n))
-bio <- c(bio_k, bio)
-y <- c(y_k, y)
-x <- c(x_k, x)
-comp <- c(rep(TRUE, n.k), comp)
-comp[k] <- TRUE 
-
-# indicator for self-reported compliance.
-src <- !k & (comp | !hh)
+n <- sum(1 - k)
+n_k <- sum(k)
 
 # indicator for whether subject contributes to the 
 # mixture distribution estimation
 inmix <- k | src
 
-# starting values for estimating the mixture distribution.
-ymeanstart <- c(mean(y[comp & !k]), mean(y[!comp & inmix]))
-ysdstart <- weighted.sd(y[!k & inmix], 
-  ymeanstart[1], 
-  ymeanstart[2],
-  as.numeric(comp[!k & inmix]),
-  as.numeric(1 - comp[!k & inmix]))              
-cmod <- lm(bio ~ y, weights = as.numeric(comp))
-ncmod <- lm(bio ~ y, weights = as.numeric(!comp & inmix))
-rr <- weighted.sd(bio, fitted(cmod), fitted(ncmod), 
-  as.numeric(comp),
-  as.numeric(!comp & inmix))
-theta.start <- c(
-  ymeanstart,
-  rep(ysdstart, 2),
-  coef(cmod)[1],
-  coef(ncmod)[1],
-  coef(cmod)[2],
-  coef(ncmod)[2],
-  rep(rr, 2))
+# guess on who compliant participants are
+bio.cut <- quantile(bio, 0.2)
+comp.guess <- bio <= bio.cut
 
-# estimating the mixture distribution.
+# get starting values for em algorithm
+starting.vals <- get.starting.vals(bio = bio[inmix],
+  x = x[inmix],
+  y = y[inmix],
+  comp = comp.guess[inmix],
+  known = k[inmix])
+
+# CURE estimator
 fit <- mixfit(bio = bio[inmix], 
   y = y[inmix], 
-  known = k[inmix],
-  start = theta.start, 
-  p_start = mean(comp[src]))
-
-# numerator for CURE. 
-prob.compliant <- rep(0, nn)
+  x = x[inmix],
+  known = known[inmix], 
+  gamma.start = starting.vals$gamma.start, 
+  alpha.start = starting.vals$alpha.start, 
+  p.start = starting.vals$p.start)
+# numerator for CURE
+prob.compliant <- rep(0, n + n_k)
 prob.compliant[inmix] <- fit$post.prob
-
 # denominator for CURE
-cure.den.model <- suppressWarnings(glm(prob.compliant[!k] ~ x[!k], 
-  family = binomial(link = "probit")))	
+cure.den.model <- suppressWarnings(glm(prob.compliant ~ x, 
+  family = binomial(link = "probit"),
+  weights = 1 - k))	
 cure.den.weight <- c(pnorm(cbind(1, x) %*% coef(cure.den.model)))
-
-# CURE
-(cure <- y.a2.mean - weighted.mean(y, prob.compliant * src / cure.den.weight))
-
-# numerator for the cutoff IPW. 
-comp.hat <- (prob.compliant * src) > 0.5
-
-# denominator for the cutoff IPW.
-cutoff.den.model <- suppressWarnings(glm(comp.hat[!k] ~ x[!k], 
-  family = binomial(link = "probit")))
-cutoff.den.weight <- c(pnorm(cbind(1, x) %*% coef(cutoff.den.model)))
+(cure <- y.a2.mean - 
+  weighted.mean(y, (1 - k) * prob.compliant / cure.den.weight))
 
 # cutoff IPW
-(cutoff.ipw <- y.a2.mean - weighted.mean(y, (comp.hat)/cutoff.den.weight))
+comp.hat <- ((1 - k) * prob.compliant) > 0.5
+# denominator
+cutoff.den.model <- suppressWarnings(glm(comp.hat ~ x, 
+  family = binomial(link = "probit"),
+  weights = 1 - k))
+cutoff.den.weight <- c(pnorm(cbind(1, x) %*% coef(cutoff.den.model)))
+(cutoff.ipw <- y.a2.mean - weighted.mean(y, comp.hat / cutoff.den.weight))
 
 # per protocol
 (pp <- y.a2.mean - mean(y[src]))
 
-# denominator for IPW based on self-reported compliance. 
-src.den.model <- glm(src[!k] ~ x[!k], family = binomial(link = "probit"))
+# IPW based on self-reported compliance. 
+src.den.model <- glm(src ~ x, 
+  family = binomial(link = "probit"),
+  weights = 1 - k)
 src.den.weight <- c(pnorm(cbind(1, x) %*% coef(src.den.model)))
-
-# IPW based on self-reported compliant. 
-(src.ipw <- y.a2.mean - weighted.mean(y, src  / src.den.weight))
+(src.ipw <- y.a2.mean - weighted.mean(y, as.numeric(src)  / src.den.weight))
 
 # ITT
-(itt <- y.a2.mean - mean(y[!k]))
+itt <- (y.a2.mean - mean(y[!k]))
 
-# bootstrap
 n.boot <- 1000
 boot <- array(dim = c(n.boot, 5))
+set.seed(322)
 for(b in seq_len(n.boot)){
   out <- rep(NA, 5)
   try({
-    y.a2.mean_t <- mean(sample(y.a2, replace = TRUE))
-    known.index <- sample(1:n.k, replace = TRUE)
-    unknown.index <- sample(n.k + 1:n, replace = TRUE)
+    known.index <- numeric(0)
+    if(n_k > 0) {
+      known.index <- sample(1:n_k, replace = TRUE)
+    }
+    unknown.index <- sample(n_k + 1:n, replace = TRUE)
     index <- sort(c(known.index, unknown.index))
     bio_t <- bio[index]
     k_t <- k[index]
@@ -163,42 +110,52 @@ for(b in seq_len(n.boot)){
     y_t <- y[index]
     src_t <- src[index]
     inmix_t <- inmix[index]
-    hh_t <- hh[index]
-    comp_t <- comp[index]
+    comp.guess_t <- comp.guess[index]
+    known_t <- known[index]
+    y.a2.mean_t <- mean(sample(group.b$y, replace = TRUE))
 
+    starting.vals_t <- get.starting.vals(bio = bio_t[inmix_t],
+      x = x_t[inmix_t],
+      y = y_t[inmix_t],
+      comp = comp.guess_t[inmix_t],
+      known = k_t[inmix_t])
     fit_t <- mixfit(bio = bio_t[inmix_t], 
       y = y_t[inmix_t], 
-      known = k_t[inmix_t], 
-      start = c(fit$theta),
-      p_start = fit$prob)	
-
-    prob.compliant_t <- rep(0, nn)
+      x = x_t[inmix_t],
+      known = known_t[inmix_t], 
+      gamma.start = starting.vals_t$gamma.start, 
+      alpha.start = starting.vals_t$alpha.start, 
+      p.start = starting.vals_t$p.start)
+    prob.compliant_t <- rep(0, n + n_k)
     prob.compliant_t[inmix_t] <- fit_t$post.prob
-    cure.den.model_t <- suppressWarnings(glm(prob.compliant_t[!k_t] ~ x_t[!k_t], 
-      family = binomial(link = "probit")))	
-    cure.den.weight_t <- c(pnorm(cbind(1, x_t) %*% coef(cure.den.model_t)))
-    (cure_t <- y.a2.mean_t - weighted.mean(y_t, prob.compliant_t * 
-      src_t / cure.den.weight_t))
+    cure.den.model_t <- suppressWarnings(glm(prob.compliant_t ~ x_t, 
+      family = binomial(link = "probit"),
+      weights = 1 - k_t))	
+    cure.den.weight_t <- c(pnorm(cbind(1, x_t) %*% 
+      coef(cure.den.model_t)))
+    (cure_t <- y.a2.mean_t - weighted.mean(y_t, 
+      (1 - k_t) * prob.compliant_t / cure.den.weight_t))
 
-
-    # 5th estimator. Same as 5, with cutoff for compliance. 
-    comp.hat_t <- (prob.compliant_t * src_t) > 0.5
-    cutoff.den.model_t <- suppressWarnings(glm(comp.hat_t[!k_t] ~ x_t[!k_t], 
-      family = binomial(link = "probit")))
+    comp.hat_t <- ((1 - k_t) * prob.compliant_t) > 0.5
+    cutoff.den.model_t <- suppressWarnings(glm(comp.hat_t ~ x_t, 
+      family = binomial(link = "probit"),
+      weights = 1 - k_t))
     cutoff.den.weight_t <- c(pnorm(cbind(1, x_t) %*% 
       coef(cutoff.den.model_t)))
-    (cutoff.ipw_t <- y.a2.mean_t - weighted.mean(y_t, comp.hat_t / 
-      cutoff.den.weight_t))
+    (cutoff.ipw_t <- y.a2.mean_t - weighted.mean(y_t, 
+      comp.hat_t / cutoff.den.weight_t))
 
     (pp_t <- y.a2.mean_t - mean(y_t[src_t]))
 
-    src.den.model_t <- glm(src_t[!k_t] ~ x_t[!k_t], 
-      family = binomial(link = "probit"))
-    src.den.weight_t <- c(pnorm(cbind(1, x_t) %*% coef(src.den.model_t)))
-    (src.ipw_t <- y.a2.mean_t - weighted.mean(y_t, src_t  / src.den.weight_t))
+    src.den.model_t <- glm(src_t ~ x_t, 
+      family = binomial(link = "probit"),
+      weights = 1 - k_t)
+    src.den.weight_t <- c(pnorm(cbind(1, x_t) %*% 
+      coef(src.den.model_t)))
+    (src.ipw_t <- y.a2.mean_t - weighted.mean(y_t, 
+      as.numeric(src_t)  / src.den.weight_t))
 
-    # ITT
-    (itt_t <- y.a2.mean_t - mean(y_t[!k_t]))
+    itt_t <- (y.a2.mean_t - mean(y_t[!k_t]))
 
     out[1] <- itt_t
     out[2] <- pp_t
@@ -210,11 +167,12 @@ for(b in seq_len(n.boot)){
   boot[b, ] <- out
 }
 
+# percentile CI
+boot.conf.ints <- t(apply(boot, 2, quantile, c(0.025, 0.975), 
+  na.rm = TRUE))
+
 # estimated SEs
 boot.se <- apply(boot, 2, sd, na.rm = TRUE)
-
-# percentile CI
-boot.conf.ints <- t(apply(boot, 2, quantile, c(0.025, 0.975), na.rm = TRUE))
 
 # create output table
 summary.table <- cbind(y.a2.mean,
@@ -225,7 +183,7 @@ summary.table <- cbind(y.a2.mean,
 
 estimators <- c("ITT", "Per Protocol", "Self-Report IPW", "Cutoff IPW", "CURE")
 dimnames(summary.table) <- list("Estimator" = estimators)
-colnames(summary.table) <- c("mu(2, 0)", "mu(1, 0)", "mu(2, 0) - mu(1, 0)",
+colnames(summary.table) <- c("mu(A, 0)", "mu(B, 0)", "mu(A, 0) - mu(B, 0)",
   "SE", "2.5%", "97.5%")
 
-round(summary.table, 2)
+round(summary.table, 2)	
