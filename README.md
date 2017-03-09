@@ -4,15 +4,15 @@ Simulation code for the manuscript
 "Estimating Causal Effects from a Randomized Clinical Trial when Noncompliance is Measured with Error".
 Designed for R 3.2.0
 
-Each R file is documented internally.
+Each R file also has documentation in the file.
 
-sim.R - main simulation code. Written to run simulation on multiple cores
-using the parallel package. The simulation requires a substantial amount of time to run
-(~ 24 hrs using 120 cores) due to the nonparametric bootstrap.
+sim.R - main simulation code. Written to run simulation on 5 servers
+using 12 ores.
 
 true_mu.R - finds the value of E{Y*(1, 0)} = mu(1, 0) for given simulation parameters. 
 
-functions.R - functions used in sim.R and true_mu.R
+functions.R - functions used by all the R files.
 
-example_analysis.R - creates a simulated data set and does an anlysis as in the application
-section of the manuscript. 
+example_data.txt - example data set for use in example_analysis.R
+
+example_analysis.R - example analysis of the data in example_data.txt
