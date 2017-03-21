@@ -34,32 +34,35 @@ sim <- function(mc.it, include.se, n.boot = 1000, include.known){
     n_k <- 0
     if(include.known) n_k <- ceiling(n * 0.1)
 
+    ii <- runif(n + n_k) < 0.7
+
     # E{Y*(1, 0)}
     true.mu <- 16.5682 
 
-    # correlation matrix for C', X, Y
-    m <- matrix(c(1.000, -0.405, -0.080,
-                 -0.405,  1.000,  0.700,
-                 -0.080,  0.700,  1.000), 3, 3)
+    # correlation matrix for data
+    m <- matrix(c(1.000, -0.4050000, -0.3300000, -0.0800000,
+                 -0.405,  1.0000000,  0.8148148,  0.7000000,
+                 -0.330,  0.8148148,  1.0000000,  0.9414324,
+                 -0.080,  0.7000000,  0.9414324,  1.0000000), 4, 4)
 
-    p <- 0.20                      # Pr(C = 1)
-    mu <- c(0, 10, 16)             # mean vector
-    s <- sqrt(c(1, 2, 3))          # standard deviations
-    V <- diag(s) %*% m %*% diag(s) # covariance matrix
+    p <- 0.20                         # Pr(C = 1)
+    mu <- c(0, 10, 1.5, 16)           # mean vector
+    s <- sqrt(c(1, 2, 2, 3))          # standard deviations
+    V <- diag(s) %*% m %*% diag(s)    # covariance matrix
 
     # generate data for main sample
     ts <- t(chol(V)) 
-    dd <- t(replicate(n, mu + ts %*% rnorm(3), simplify = TRUE))
+    dd <- t(replicate(n, mu + ts %*% rnorm(4), simplify = TRUE))
     cstar <- dd[, 1]
     x <- dd[, 2]
-    y <- dd[, 3]
+    y <- dd[, 4]
     comp <- cstar > qnorm(1 - p)
 
     # generate data for known compliers
-    ff <- t(replicate(1e4, mu + ts %*% rnorm(3), simplify = TRUE))
+    ff <- t(replicate(1e4, mu + ts %*% rnorm(4), simplify = TRUE))
     comp_k <- ff[, 1] > qnorm(1 - 0.18)
     x_k <- ff[comp_k, 2][seq_len(n_k)]
-    y_k <- ff[comp_k, 3][seq_len(n_k)]
+    y_k <- ff[comp_k, 4][seq_len(n_k)]
 
     # combine data for entire sample.
     k <- rep(c(TRUE, FALSE), c(n_k, n))
@@ -76,6 +79,7 @@ sim <- function(mc.it, include.se, n.boot = 1000, include.known){
     b.sd.9 <- 0.44    # For AUC = 0.9
     bio.8 <- bio.lp + b.sd.8 * biost
     bio.9 <- bio.lp + b.sd.9 * biost
+
 
     # indicator for whether subject reports noncompliance without error. 
     hh <- runif(n + n_k) < 0.7
